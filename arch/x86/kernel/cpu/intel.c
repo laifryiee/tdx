@@ -66,6 +66,7 @@ bool intel_cc_platform_has(enum cc_attr attr)
 {
 	switch (attr) {
 	case CC_ATTR_GUEST_TDX:
+	case CC_ATTR_GUEST_UNROLL_STRING_IO:
 		return cpu_feature_enabled(X86_FEATURE_TDX_GUEST);
 	default:
 		return false;
