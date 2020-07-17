@@ -516,6 +516,14 @@ static void tdx_handle_io(struct pt_regs *regs, u32 exit_qual)
 	port = VE_GET_PORT_NUM(exit_qual);
 	mask = GENMASK(8 * size, 0);
 
+	if (!tdx_allowed_port(port)) {
+		if (!out) {
+			regs->ax &= ~mask;
+			regs->ax |= (UINT_MAX & mask);
+		}
+		return;
+	}
+
 	if (!out) {
 		ret = _trace_tdx_hypercall(EXIT_REASON_IO_INSTRUCTION,
 					   size, out, port, regs->ax,
