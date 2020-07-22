@@ -9,8 +9,12 @@
 
 #include <linux/export.h>
 #include <linux/cc_platform.h>
+#include <linux/cc_device.h>
 #include <linux/mem_encrypt.h>
 #include <linux/processor.h>
+#include <linux/device.h>
+
+#include <asm/tdx.h>
 
 bool cc_platform_has(enum cc_attr attr)
 {
@@ -22,3 +26,12 @@ bool cc_platform_has(enum cc_attr attr)
 	return false;
 }
 EXPORT_SYMBOL_GPL(cc_platform_has);
+
+bool cc_guest_authorized(struct device *dev)
+{
+	if (cpu_feature_enabled(X86_FEATURE_TDX_GUEST))
+		return tdx_guest_authorized(dev);
+
+	return dev->authorized;
+}
+EXPORT_SYMBOL_GPL(cc_guest_authorized);

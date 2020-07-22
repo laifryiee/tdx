@@ -84,6 +84,7 @@ bool intel_cc_platform_has(enum cc_attr attr)
 	case CC_ATTR_GUEST_MEM_ENCRYPT:
 	case CC_ATTR_GUEST_SHARED_MAPPING_INIT:
 	case CC_ATTR_MEM_ENCRYPT:
+	case CC_ATTR_GUEST_DEVICE_FILTER:
 		return cpu_feature_enabled(X86_FEATURE_TDX_GUEST);
 	default:
 		return false;
