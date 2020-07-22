@@ -38,6 +38,9 @@ static char cmd_authorized_devices[CMDLINE_MAX_LEN];
 static struct authorize_node cmd_allowed_nodes[CMDLINE_MAX_NODES];
 static int cmd_allowed_nodes_len;
 
+/* Status of TDX filter */
+static bool tdx_filter_status = 1;
+
 /* Set true if authorize_allow_devs is used */
 static bool filter_overridden;
 
@@ -176,10 +179,25 @@ bool tdx_guest_authorized(struct device *dev)
 }
 EXPORT_SYMBOL_GPL(tdx_guest_authorized);
 
+bool tdx_filter_enabled(void)
+{
+	return tdx_filter_status;
+}
+
 void __init tdx_filter_init(void)
 {
 	if (!cc_platform_has(CC_ATTR_GUEST_DEVICE_FILTER))
 		return;
+
+	if (cmdline_find_option_bool(boot_command_line, "tdx_disable_filter"))
+		tdx_filter_status = 0;
+
+	if (!tdx_filter_enabled()) {
+		pr_info("Disabled TDX guest filter support\n");
+		ioremap_force_shared = true;
+		add_taint(TAINT_CONF_NO_LOCKDOWN, LOCKDEP_STILL_OK);
+		return;
+	}
 
 	/* Set default authorization as disabled */
 	dev_default_authorization = false;

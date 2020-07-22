@@ -27,6 +27,7 @@
 #include <asm/resctrl.h>
 #include <asm/numa.h>
 #include <asm/thermal.h>
+#include <asm/tdx.h>
 
 #ifdef CONFIG_X86_64
 #include <linux/topology.h>
@@ -75,6 +76,8 @@ __setup("x86_cc_clear=", x86_cc_clear_setup);
 
 bool intel_cc_platform_has(enum cc_attr attr)
 {
+	bool tdx_guest_enabled = cpu_feature_enabled(X86_FEATURE_TDX_GUEST);
+
 	if (attr == x86_disable_cc)
 		return false;
 
@@ -84,8 +87,9 @@ bool intel_cc_platform_has(enum cc_attr attr)
 	case CC_ATTR_GUEST_MEM_ENCRYPT:
 	case CC_ATTR_GUEST_SHARED_MAPPING_INIT:
 	case CC_ATTR_MEM_ENCRYPT:
+		return tdx_guest_enabled;
 	case CC_ATTR_GUEST_DEVICE_FILTER:
-		return cpu_feature_enabled(X86_FEATURE_TDX_GUEST);
+		return tdx_filter_enabled() && tdx_guest_enabled;
 	default:
 		return false;
 	}
