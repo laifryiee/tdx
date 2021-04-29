@@ -63,6 +63,39 @@ static inline u64 _tdx_hypercall(u64 fn, u64 r12, u64 r13, u64 r14,
 	return out->r10;
 }
 
+/* Traced version of _tdx_hypercall() */
+static u64 _trace_tdx_hypercall(u64 fn, u64 r12, u64 r13, u64 r14, u64 r15,
+				struct tdx_hypercall_output *out)
+{
+	struct tdx_hypercall_output dummy_out = {};
+	u64 err;
+
+	trace_tdx_hypercall_enter_rcuidle(fn, r12, r13, r14, r15);
+	err = _tdx_hypercall(fn, r12, r13, r14, r15, out);
+	if (!out)
+		out = &dummy_out;
+	trace_tdx_hypercall_exit_rcuidle(err, out->r11, out->r12, out->r13,
+					 out->r14, out->r15);
+
+	return err;
+}
+
+static u64 __trace_tdx_module_call(u64 fn, u64 rcx, u64 rdx, u64 r8, u64 r9,
+				   struct tdx_module_output *out)
+{
+	struct tdx_module_output dummy_out = {};
+	u64 err;
+
+	trace_tdx_module_call_enter_rcuidle(fn, rcx, rdx, r8, r9);
+	err = __tdx_module_call(fn, rcx, rdx, r8, r9, out);
+	if (!out)
+		out = &dummy_out;
+	trace_tdx_module_call_exit_rcuidle(err, out->rcx, out->rdx, out->r8,
+					   out->r9, out->r10, out->r11);
+
+	return err;
+}
+
 static inline bool cpuid_has_tdx_guest(void)
 {
 	u32 eax, sig[3];
@@ -94,7 +127,7 @@ static void tdx_get_info(void)
 	 * can be found in TDX Guest-Host-Communication
 	 * Interface (GHCI), sec 2.4.2.
 	 */
-	ret = __tdx_module_call(TDINFO, 0, 0, 0, 0, &out);
+	ret = __trace_tdx_module_call(TDINFO, 0, 0, 0, 0, &out);
 
 	/*
 	 * Non zero return means buggy TDX module (which is
@@ -119,7 +152,7 @@ static void tdx_accept_page(phys_addr_t gpa)
 	 * about ABI can be found in TDX Guest-Host-Communication
 	 * Interface (GHCI), sec 2.4.7.
 	 */
-	ret = __tdx_module_call(TDACCEPTPAGE, gpa, 0, 0, 0, NULL);
+	ret = __trace_tdx_module_call(TDACCEPTPAGE, gpa, 0, 0, 0, NULL);
 
 	/*
 	 * Non zero return value means buggy TDX module (which is
@@ -185,7 +218,8 @@ static __cpuidle void _tdx_halt(const bool irq_disabled, const bool do_sti)
 	 * whether to call STI instruction before executing TDCALL
 	 * instruction.
 	 */
-	ret = _tdx_hypercall(EXIT_REASON_HLT, irq_disabled, 0, 0, do_sti, NULL);
+	ret = _trace_tdx_hypercall(EXIT_REASON_HLT, irq_disabled, 0, 0,
+				   do_sti, NULL);
 
 	/*
 	 * Use WARN_ONCE() to report the failure. Since tdx_*halt() calls
@@ -245,7 +279,7 @@ static u64 tdx_read_msr_safe(unsigned int msr, int *err)
 	 * can be found in TDX Guest-Host-Communication Interface
 	 * (GHCI), sec 3.10.
 	 */
-	ret = _tdx_hypercall(EXIT_REASON_MSR_READ, msr, 0, 0, 0, &out);
+	ret = _trace_tdx_hypercall(EXIT_REASON_MSR_READ, msr, 0, 0, 0, &out);
 
 	*err = ret ? -EIO : 0;
 
@@ -264,8 +298,8 @@ static int tdx_write_msr_safe(unsigned int msr, unsigned int low,
 	 * can be found in TDX Guest-Host-Communication Interface
 	 * (GHCI) sec 3.11.
 	 */
-	ret = _tdx_hypercall(EXIT_REASON_MSR_WRITE, msr, (u64)high << 32 | low,
-			     0, 0, NULL);
+	ret = _trace_tdx_hypercall(EXIT_REASON_MSR_WRITE, msr,
+				   (u64)high << 32 | low, 0, 0, NULL);
 
 	return ret ? -EIO : 0;
 }
@@ -280,7 +314,8 @@ static u64 tdx_handle_cpuid(struct pt_regs *regs)
 	 * ABI can be found in TDX Guest-Host-Communication Interface
 	 * (GHCI), section titled "VP.VMCALL<Instruction.CPUID>".
 	 */
-	ret = _tdx_hypercall(EXIT_REASON_CPUID, regs->ax, regs->cx, 0, 0, &out);
+	ret = _trace_tdx_hypercall(EXIT_REASON_CPUID, regs->ax,
+				   regs->cx, 0, 0, &out);
 
 	/*
 	 * As per TDX GHCI CPUID ABI, r12-r15 registers contains contents of
@@ -319,11 +354,16 @@ static void tdx_handle_io(struct pt_regs *regs, u32 exit_qual)
 	port = VE_GET_PORT_NUM(exit_qual);
 	mask = GENMASK(8 * size, 0);
 
-	ret = _tdx_hypercall(EXIT_REASON_IO_INSTRUCTION, size, out, port,
-			     regs->ax, &outh);
 	if (!out) {
+		ret = _trace_tdx_hypercall(EXIT_REASON_IO_INSTRUCTION,
+					   size, out, port, regs->ax,
+					   &outh);
 		regs->ax &= ~mask;
 		regs->ax |= (ret ? UINT_MAX : outh.r11) & mask;
+	} else {
+		ret = _tdx_hypercall(EXIT_REASON_IO_INSTRUCTION,
+				     size, out, port, regs->ax,
+				     &outh);
 	}
 }
 
@@ -333,8 +373,8 @@ static unsigned long tdx_mmio(int size, bool write, unsigned long addr,
 	struct tdx_hypercall_output out = {0};
 	u64 err;
 
-	err = _tdx_hypercall(EXIT_REASON_EPT_VIOLATION, size, write,
-			     addr, *val, &out);
+	err = _trace_tdx_hypercall(EXIT_REASON_EPT_VIOLATION, size, write,
+				   addr, *val, &out);
 	*val = out.r11;
 	return err;
 }
@@ -446,7 +486,7 @@ unsigned long tdx_get_ve_info(struct ve_info *ve)
 	 * additional #VEs are permitted (but it is expected not to
 	 * happen unless kernel panics).
 	 */
-	ret = __tdx_module_call(TDGETVEINFO, 0, 0, 0, 0, &out);
+	ret = __trace_tdx_module_call(TDGETVEINFO, 0, 0, 0, 0, &out);
 
 	ve->exit_reason = out.rcx;
 	ve->exit_qual   = out.rdx;
