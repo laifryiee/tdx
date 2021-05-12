@@ -26,6 +26,7 @@
 #include <asm/resctrl.h>
 #include <asm/numa.h>
 #include <asm/thermal.h>
+#include <asm/intel_cc_platform.h>
 
 #ifdef CONFIG_X86_64
 #include <linux/topology.h>
@@ -59,6 +60,13 @@ static u64 msr_test_ctrl_cache __ro_after_init;
  * on CPUs that do not support SLD can cause fireworks, even when writing '0'.
  */
 static bool cpu_model_supports_sld __ro_after_init;
+
+#ifdef CONFIG_ARCH_HAS_CC_PLATFORM
+bool intel_cc_platform_has(enum cc_attr attr)
+{
+	return false;
+}
+#endif
 
 /*
  * Processors which have self-snooping capability can handle conflicting

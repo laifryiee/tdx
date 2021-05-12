@@ -103,6 +103,12 @@ static inline u64 sme_get_me_mask(void)
 	return sme_me_mask;
 }
 
+#if defined(CONFIG_CPU_SUP_INTEL) && defined(CONFIG_ARCH_HAS_CC_PLATFORM)
+bool intel_cc_platform_has(enum cc_attr attr);
+#else
+static inline bool intel_cc_platform_has(enum cc_attr attr) { return false; }
+#endif
+
 #endif	/* __ASSEMBLY__ */
 
 #endif	/* __X86_MEM_ENCRYPT_H__ */
