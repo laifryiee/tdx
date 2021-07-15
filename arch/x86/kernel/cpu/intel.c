@@ -62,8 +62,22 @@ static u64 msr_test_ctrl_cache __ro_after_init;
 static bool cpu_model_supports_sld __ro_after_init;
 
 #ifdef CONFIG_ARCH_HAS_CC_PLATFORM
+
+unsigned int x86_disable_cc = -1;
+
+static int __init x86_cc_clear_setup(char *arg)
+{
+	get_option(&arg, &x86_disable_cc);
+
+	return 1;
+}
+__setup("x86_cc_clear=", x86_cc_clear_setup);
+
 bool intel_cc_platform_has(enum cc_attr attr)
 {
+	if (attr == x86_disable_cc)
+		return false;
+
 	switch (attr) {
 	case CC_ATTR_GUEST_TDX:
 	case CC_ATTR_GUEST_UNROLL_STRING_IO:
@@ -444,6 +458,11 @@ static void intel_workarounds(struct cpuinfo_x86 *c)
 		set_cpu_cap(c, X86_FEATURE_PAE);
 		add_taint(TAINT_CPU_OUT_OF_SPEC, LOCKDEP_NOW_UNRELIABLE);
 	}
+
+#ifdef CONFIG_ARCH_HAS_CC_PLATFORM
+	if (x86_disable_cc > 0)
+		add_taint(TAINT_CONF_NO_LOCKDOWN, LOCKDEP_STILL_OK);
+#endif
 
 	/*
 	 * P4 Xeon erratum 037 workaround.
