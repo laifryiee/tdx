@@ -454,8 +454,6 @@ static int tdx_write_msr_safe(unsigned int msr, unsigned int low,
 {
 	u64 ret;
 
-	WARN_ON_ONCE(tdx_is_context_switched_msr(msr));
-
 	/*
 	 * Emulate the MSR write via hypercall. More info about ABI
 	 * can be found in TDX Guest-Host-Communication Interface
@@ -465,6 +463,14 @@ static int tdx_write_msr_safe(unsigned int msr, unsigned int low,
 				   (u64)high << 32 | low, 0, 0, NULL);
 
 	return ret ? -EIO : 0;
+}
+
+void notrace tdx_write_msr(unsigned int msr, u32 low, u32 high)
+{
+	if (tdx_is_context_switched_msr(msr))
+		native_write_msr(msr, low, high);
+	else
+		tdx_write_msr_safe(msr, low, high);
 }
 
 static u64 tdx_handle_cpuid(struct pt_regs *regs)
@@ -808,6 +814,7 @@ void __init tdx_early_init(void)
 
 	pv_ops.irq.safe_halt = tdx_safe_halt;
 	pv_ops.irq.halt = tdx_halt;
+	pv_ops.cpu.write_msr = tdx_write_msr;
 
 	legacy_pic = &null_legacy_pic;
 	swiotlb_force = SWIOTLB_FORCE;
