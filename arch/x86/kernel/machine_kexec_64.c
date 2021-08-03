@@ -570,7 +570,8 @@ void arch_kexec_unprotect_crashkres(void)
  */
 int arch_kexec_post_alloc_pages(void *vaddr, unsigned int pages, gfp_t gfp)
 {
-	if (!cc_platform_has(CC_ATTR_HOST_MEM_ENCRYPT))
+	if (!cc_platform_has(CC_ATTR_HOST_MEM_ENCRYPT) ||
+	    cc_platform_has(CC_ATTR_GUEST_TDX))
 		return 0;
 
 	/*
@@ -583,7 +584,8 @@ int arch_kexec_post_alloc_pages(void *vaddr, unsigned int pages, gfp_t gfp)
 
 void arch_kexec_pre_free_pages(void *vaddr, unsigned int pages)
 {
-	if (!cc_platform_has(CC_ATTR_HOST_MEM_ENCRYPT))
+	if (!cc_platform_has(CC_ATTR_HOST_MEM_ENCRYPT) ||
+	    cc_platform_has(CC_ATTR_GUEST_TDX))
 		return;
 
 	/*
