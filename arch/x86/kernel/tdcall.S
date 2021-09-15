@@ -274,6 +274,7 @@ SYM_FUNC_START(__tdx_hypercall)
 	/* Set R15 register to 0, it is unused in EXIT_REASON_HLT case */
 	xor %r15, %r15
 	sti
+	lfence
 skip_sti:
 	tdcall
 
