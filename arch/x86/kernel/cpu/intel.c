@@ -11,6 +11,7 @@
 #include <linux/init.h>
 #include <linux/uaccess.h>
 #include <linux/delay.h>
+#include <linux/mem_encrypt.h>
 
 #include <asm/cpufeature.h>
 #include <asm/msr.h>
@@ -26,7 +27,6 @@
 #include <asm/resctrl.h>
 #include <asm/numa.h>
 #include <asm/thermal.h>
-#include <asm/intel_cc_platform.h>
 
 #ifdef CONFIG_X86_64
 #include <linux/topology.h>
@@ -64,6 +64,13 @@ static bool cpu_model_supports_sld __ro_after_init;
 #ifdef CONFIG_ARCH_HAS_CC_PLATFORM
 bool intel_cc_platform_has(enum cc_attr attr)
 {
+	switch (attr) {
+	case CC_ATTR_GUEST_TDX:
+		return cpu_feature_enabled(X86_FEATURE_TDX_GUEST);
+	default:
+		return false;
+	}
+
 	return false;
 }
 #endif
