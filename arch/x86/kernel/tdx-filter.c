@@ -13,6 +13,9 @@
 #include <asm/tdx.h>
 #include <asm/cmdline.h>
 
+#define CMDLINE_MAX_NODES		100
+#define CMDLINE_MAX_LEN			1000
+
 /*
  * To support regex formats like (ALL:ALL), device allow
  * list uses char* type. Alternative choices like device_id
@@ -26,6 +29,17 @@ struct authorize_node {
 
 /* Temporary string for storing device name */
 static char dev_str[16];
+
+/*
+ * Memory to store data passed via command line options
+ * authorize_allow_devs.
+ */
+static char cmd_authorized_devices[CMDLINE_MAX_LEN];
+static struct authorize_node cmd_allowed_nodes[CMDLINE_MAX_NODES];
+static int cmd_allowed_nodes_len;
+
+/* Set true if authorize_allow_devs is used */
+static bool filter_overridden;
 
 /*
  * Allow list for PCI bus
@@ -101,6 +115,42 @@ char *get_dev_name(struct device *dev)
 	return (char *)dev_name(dev);
 }
 
+static __init void add_authorize_nodes(char *p)
+{
+	struct authorize_node *n;
+	int j = 0;
+	char *k;
+
+	while ((k = strsep(&p, ";")) != NULL) {
+		if (j >= CMDLINE_MAX_NODES) {
+			pr_err("Authorize nodes exceeds MAX allowed\n");
+			break;
+		}
+		n = &cmd_allowed_nodes[j++];
+		n->bus = strsep(&k, ":");
+		n->dev_list = k;
+	}
+
+	if (j)
+		cmd_allowed_nodes_len = j;
+}
+
+static __init int allowed_cmdline_setup(char *buf)
+{
+	if (strlen(buf) >= CMDLINE_MAX_LEN)
+		pr_warn("Authorized allowed devices list exceed %d chars\n",
+			CMDLINE_MAX_LEN);
+
+	strscpy(cmd_authorized_devices, buf, CMDLINE_MAX_LEN);
+
+	add_authorize_nodes(cmd_authorized_devices);
+
+	filter_overridden = true;
+
+	return 0;
+}
+__setup("authorize_allow_devs=", allowed_cmdline_setup);
+
 bool tdx_guest_authorized(struct device *dev)
 {
 	int i;
@@ -111,6 +161,13 @@ bool tdx_guest_authorized(struct device *dev)
 	/* Lookup arch allow list */
 	for (i = 0;  i < ARRAY_SIZE(allow_list); i++) {
 		if (authorized_node_match(&allow_list[i], dev->bus->name,
+					  get_dev_name(dev)))
+			return true;
+	}
+
+	/* Lookup command line allow list */
+	for (i = 0; i < cmd_allowed_nodes_len; i++) {
+		if (authorized_node_match(&cmd_allowed_nodes[i], dev->bus->name,
 					  get_dev_name(dev)))
 			return true;
 	}
@@ -126,6 +183,9 @@ void __init tdx_filter_init(void)
 
 	/* Set default authorization as disabled */
 	dev_default_authorization = false;
+
+	if (filter_overridden)
+		add_taint(TAINT_CONF_NO_LOCKDOWN, LOCKDEP_STILL_OK);
 
 	pr_info("Enabled TDX guest device filter\n");
 }
